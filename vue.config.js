@@ -42,18 +42,6 @@ if (isProduction) {
                 args[0].patterns[0].globOptions = {ignore: ['tmpl/default.ejs',],};
                 return args;
             });
-            // config.plugin('copy').tap(args => {
-            //     console.log(args[0]);
-            //     args[0][0].from = 'module';
-            //     args[0][0].ignore = ['tmpl/default.ejs',];
-            //     return args;
-            // });
-            // config.plugin('copy').use(CopyWebpackPlugin, [{
-            //     patterns: [{
-            //         from: 'module',
-            //         globOptions: {ignore: ['tmpl/default.ejs',],},
-            //     },],
-            // },]);
             //copy images
             config.plugin('copy-images').use(CopyWebpackPlugin, [{
                 patterns: [{
