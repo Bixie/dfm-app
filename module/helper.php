@@ -6,9 +6,11 @@ use Bixie\DfmApi\PreviewZip;
 use Bixie\ModDfmApp\Helpers\RequestParamsHelper;
 use Joomla\CMS\Access\Exception\NotAllowed as NotAllowedException;
 use Joomla\CMS\Application\CMSApplication;
+use Joomla\CMS\Application\CMSApplicationInterface;
 use Joomla\CMS\Factory;
-use Joomla\CMS\Helper\ModuleHelper;
 use Joomla\Registry\Registry;
+use Joomla\CMS\Event\GenericEvent;
+
 
 abstract class ModDfmAppHelper {
 
@@ -20,8 +22,24 @@ abstract class ModDfmAppHelper {
      */
     public static function getParams (): Registry
     {
-        $module  = ModuleHelper::getModule('mod_dfm_app');
+        $db = JFactory::getDbo();
+        $query = $db->getQuery(true)
+            ->select('*')
+            ->from($db->quoteName('#__modules'))
+            ->where($db->quoteName('module') . ' = ' . $db->quote('mod_dfm_app'));
+        $db->setQuery($query);
+        $module = $db->loadObject();
         return new Registry($module->params);
+    }
+
+    protected static function dispatch (string $name, object $user, array $arguments = []): mixed
+    {
+        $event = new GenericEvent($name, array_merge([
+            'user' => $user,
+            'result' => null,
+        ], $arguments));
+        Factory::getApplication()->getDispatcher()->dispatch($name, $event);
+        return $event['result'];
     }
 
     /**
@@ -37,7 +55,7 @@ abstract class ModDfmAppHelper {
 
         //get userinfo/license key
         $user = JFactory::getUser();
-        [[$licenseKey, $isTrial,],] = \JEventDispatcher::getInstance()->trigger('getActiveLicenseKey', [$user,]);
+        [$licenseKey, $isTrial,] = self::dispatch('getActiveLicenseKey', $user);
 //        $licenseKey = 'test';
         if (!$licenseKey) {
             Factory::getApplication()->setHeader('status', 403, true);
@@ -48,7 +66,7 @@ abstract class ModDfmAppHelper {
         $api = self::getApi($moduleParams);
         //when not in trial, a separate CSI license is required
         if (!$isTrial && ($requestparams->getData('params')['DataProvider'] ?? '') === 'CSI') {
-            [$valid,] = \JEventDispatcher::getInstance()->trigger('onCheckCsiSubscription', [$user,]);
+            $valid = self::dispatch('checkCsiSubscription', $user);
             if (!$valid) {
                 Factory::getApplication()->setHeader('status', 403, true);
                 throw new NotAllowedException('No valid CSI license found');
@@ -211,7 +229,7 @@ abstract class ModDfmAppHelper {
         $user = self::getUser($app);
 
         if ($field_name == 'license_key') {
-            [$exists,] = \JEventDispatcher::getInstance()->trigger('licenseKeyAlreadyExists', [$user, $value,]);
+            $exists = self::dispatch('licenseKeyAlreadyExists', $user, ['license_key' => $value,]);
             if ($exists) {
                 $app->setHeader('status', 422, true);
                 throw new \InvalidArgumentException('License key already in use');
@@ -219,19 +237,19 @@ abstract class ModDfmAppHelper {
         }
 
         if ($field_name == 'csi_email' && $value) {
-            [$valid,] = \JEventDispatcher::getInstance()->trigger('onCheckCsiSubscription', [$user, $value,]);
+            $valid = self::dispatch('checkCsiSubscription', $user, ['email' => $value,]);
             if (!$valid) {
                 $app->setHeader('status', 422, true);
                 throw new \InvalidArgumentException('CSI license is not valid');
             }
         }
 
-        [$success,] = \JEventDispatcher::getInstance()->trigger('updateUserField', [$user, $field_name, $value,]);
+        $success = self::dispatch('updateUserField', $user, compact('field_name', 'value'));
         if (!$success) {
             $app->setHeader('status', 500, true);
             throw new \RuntimeException('Error in saving value');
         }
-        [$user_data,] = \JEventDispatcher::getInstance()->trigger('getUserDfmAppData', [$user,]);
+        $user_data = self::dispatch('getUserDfmAppData', $user);
         return compact('success', 'user_data');
     }
 
@@ -246,7 +264,7 @@ abstract class ModDfmAppHelper {
         }
     }
 
-    protected static function getUser (CMSApplication $app)
+    protected static function getUser (CMSApplicationInterface $app)
     {
         $user = JFactory::getUser();
         if (!$user->id) {

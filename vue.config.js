@@ -1,4 +1,3 @@
-const HtmlWebpackPlugin = require('html-webpack-plugin');
 const ZipWebpackPlugin = require('zip-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const isProduction = process.env.NODE_ENV === 'production';
@@ -31,28 +30,37 @@ if (isProduction) {
             template: 'module/tmpl/default.ejs',
             filename: 'tmpl/default.php',
             title: 'Module template',
+            inject: false,
+            appMountId: 'app',
         },
     };
     vueConfig.chainWebpack = config => {
         if (isProduction) {
-            config.plugin('html-module').use(HtmlWebpackPlugin, [{
-                filename: 'tmpl/default.php',
-                template: 'module/tmpl/default.ejs',
-                inject: false,
-                appMountId: 'app',
-            },]);
             //copy module bootstrapping
             config.plugin('copy').tap(args => {
-                args[0][0].from = 'module';
-                args[0][0].ignore = ['tmpl/default.ejs', '.DS_Store',];
+                args[0].patterns[0].from = 'module';
+                args[0].patterns[0].globOptions = {ignore: ['tmpl/default.ejs',],};
                 return args;
             });
+            // config.plugin('copy').tap(args => {
+            //     console.log(args[0]);
+            //     args[0][0].from = 'module';
+            //     args[0][0].ignore = ['tmpl/default.ejs',];
+            //     return args;
+            // });
+            // config.plugin('copy').use(CopyWebpackPlugin, [{
+            //     patterns: [{
+            //         from: 'module',
+            //         globOptions: {ignore: ['tmpl/default.ejs',],},
+            //     },],
+            // },]);
             //copy images
-            config.plugin('copy-images').use(CopyWebpackPlugin, [[{
-                from: 'public/images',
-                to: 'assets/images',
-                ignore: ['tmpl/default.ejs', '.DS_Store',],
-            },],]);
+            config.plugin('copy-images').use(CopyWebpackPlugin, [{
+                patterns: [{
+                    from: 'public/images',
+                    to: 'assets/images',
+                },],
+            },]);
             //create zip
             config.plugin('zip-module').use(ZipWebpackPlugin, [{
                 path: '../dist',
